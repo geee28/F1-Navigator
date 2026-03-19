@@ -1,0 +1,19 @@
+# F1 Navigator dependencies
+
+# OpenAI — embeddings + GPT-4o chat
+openai>=1.30.0
+
+# Vector database
+pinecone>=5.0.0
+
+# BM25 keyword search
+rank-bm25>=0.2.2
+
+# Terminal UI
+rich>=13.0.0
+
+# Progress bars (used in embed_and_index.py)
+tqdm>=4.66.0
+
+# Environment variable management
+python-dotenv>=1.0.0
