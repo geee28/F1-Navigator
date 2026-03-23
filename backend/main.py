@@ -17,21 +17,36 @@ from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 from auth import AuthHandler
 from database import Database
 from news import fetch_f1_news
+from notifications import run_daily_notifications
 from rag import hybrid_search, stream_chat
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 
-db   = Database()
-auth = AuthHandler()
+db        = Database()
+auth      = AuthHandler()
+scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
+    # Run daily at 08:00 UTC
+    scheduler.add_job(
+        run_daily_notifications,
+        "cron",
+        hour=15, minute=23,
+        args=[db],
+        id="daily_notifications",
+        replace_existing=True,
+    )
+    scheduler.start()
     yield
+    scheduler.shutdown(wait=False)
     await db.close()
 
 
@@ -93,6 +108,10 @@ class ProfileUpdate(BaseModel):
     country_of_origin:      Optional[str] = None
     country_of_citizenship: Optional[str] = None
     graduation_date:        Optional[str] = None
+
+
+class NotificationPrefsUpdate(BaseModel):
+    guides: list[str]
 
 
 class ChatRequest(BaseModel):
@@ -160,6 +179,27 @@ async def update_profile(
 ):
     await db.update_profile(user_id, data.model_dump(exclude_none=True))
     return await db.get_profile(user_id)
+
+
+# ── Notification preferences ───────────────────────────────────────────────────
+
+VALID_GUIDES = {"opt", "stem-opt", "cpt", "h1b"}
+
+
+@app.get("/api/notifications")
+async def get_notifications(user_id: str = Depends(current_user)):
+    guides = await db.get_notification_prefs(user_id)
+    return {"guides": guides}
+
+
+@app.put("/api/notifications")
+async def update_notifications(
+    data: NotificationPrefsUpdate,
+    user_id: str = Depends(current_user),
+):
+    guides = [g for g in data.guides if g in VALID_GUIDES]
+    await db.update_notification_prefs(user_id, guides)
+    return {"guides": guides}
 
 
 # ── Chat (streaming SSE) ───────────────────────────────────────────────────────

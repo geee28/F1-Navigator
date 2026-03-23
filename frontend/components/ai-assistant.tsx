@@ -1,9 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Bot, Send, User, ExternalLink, ChevronDown, ChevronUp } from "lucide-react"
+import { Bot, User, ExternalLink, ChevronDown, ChevronUp, ArrowUp } from "lucide-react"
 import { chatStream, type SourceItem } from "@/lib/api"
 
 interface Message {
@@ -12,6 +10,11 @@ interface Message {
   content: string
   timestamp: Date
   sources?: SourceItem[]
+}
+
+interface AIAssistantProps {
+  sessionId:       string | null
+  onSessionCreate: (id: string, title: string) => void
 }
 
 const COLLAPSE_THRESHOLD = 400
@@ -25,13 +28,6 @@ const quickQuestions = [
   "Can I do CPT while still in school?",
 ]
 
-const defaultWelcome: Message = {
-  id: "welcome",
-  role: "assistant",
-  content: "Hello! I'm your F1 immigration assistant. Ask me anything about OPT, STEM OPT, CPT, H-1B, or any F1 question.",
-  timestamp: new Date(),
-}
-
 function formatContent(content: string) {
   return content.split("\n").map((line, i) => {
     const html = line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
@@ -42,13 +38,47 @@ function formatContent(content: string) {
   })
 }
 
-export function AIAssistant() {
-  const [messages, setMessages] = useState<Message[]>([defaultWelcome])
-  const [input, setInput] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
-  const [expandedMsgs, setExpandedMsgs] = useState<Set<string>>(new Set())
-  const scrollRef = useRef<HTMLDivElement>(null)
+function loadSessionMessages(sessionId: string | null): Message[] {
+  if (!sessionId) return []
+  try {
+    const stored = localStorage.getItem(`f1nav-session-${sessionId}`)
+    if (stored) return JSON.parse(stored)
+  } catch {}
+  return []
+}
+
+export function AIAssistant({ sessionId, onSessionCreate }: AIAssistantProps) {
+  const [messages,          setMessages]         = useState<Message[]>(() => loadSessionMessages(sessionId))
+  const [input,             setInput]             = useState("")
+  const [isTyping,          setIsTyping]          = useState(false)
+  const [expandedMsgs,      setExpandedMsgs]      = useState<Set<string>>(new Set())
+  const [internalSessionId, setInternalSessionId] = useState<string | null>(sessionId)
+
+  const scrollRef       = useRef<HTMLDivElement>(null)
+  const inputRef        = useRef<HTMLTextAreaElement>(null)
   const isNearBottomRef = useRef(true)
+
+  // Auto-focus input on mount
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (internalSessionId && messages.length > 0) {
+      localStorage.setItem(`f1nav-session-${internalSessionId}`, JSON.stringify(messages))
+    }
+  }, [messages, internalSessionId])
+
+  // Auto-scroll
+  const handleScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
+    }
+  }, [messages, isTyping])
 
   const toggleExpand = (id: string) =>
     setExpandedMsgs((prev) => {
@@ -57,35 +87,34 @@ export function AIAssistant() {
       return next
     })
 
-  const handleScroll = () => {
-    const el = scrollRef.current
-    if (!el) return
-    isNearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-  }
-
-  useEffect(() => {
-    if (isNearBottomRef.current) {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
-    }
-  }, [messages, isTyping])
-
   const handleSend = async (content: string) => {
     const trimmed = content.trim()
     if (!trimmed || isTyping) return
 
-    const userMsg: Message = { id: `u-${Date.now()}`, role: "user", content: trimmed, timestamp: new Date() }
+    // Create session on first message
+    let sid = internalSessionId
+    if (!sid) {
+      sid = `session-${Date.now()}`
+      setInternalSessionId(sid)
+      onSessionCreate(sid, trimmed.length > 45 ? trimmed.slice(0, 45) + "…" : trimmed)
+    }
+
+    const userMsg: Message = {
+      id: `u-${Date.now()}`, role: "user", content: trimmed, timestamp: new Date(),
+    }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setIsTyping(true)
     isNearBottomRef.current = true
 
     const assistantId = `a-${Date.now()}`
-    setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "", timestamp: new Date() }])
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
+    ])
 
     try {
-      const history = messages
-        .filter((m) => m.id !== "welcome")
-        .map((m) => ({ role: m.role, content: m.content }))
+      const history = messages.map((m) => ({ role: m.role, content: m.content }))
 
       for await (const event of chatStream(trimmed, history)) {
         if (event.type === "token") {
@@ -105,37 +134,102 @@ export function AIAssistant() {
     } catch {
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: "Sorry, something went wrong. Please try again." } : m
+          m.id === assistantId
+            ? { ...m, content: "Sorry, something went wrong. Please try again." }
+            : m
         )
       )
     } finally {
       setIsTyping(false)
+      setTimeout(() => inputRef.current?.focus(), 50)
     }
   }
 
+  // Auto-resize textarea
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value)
+    e.target.style.height = "auto"
+    e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px"
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSend(input)
+    }
+  }
+
+  const hasMessages = messages.length > 0
+
+  // ── Shared input box ────────────────────────────────────────────────────────
+  const InputBox = (
+    <div className={hasMessages ? "border-t border-border/40 bg-background px-4 pb-4 pt-3" : ""}>
+      <div className={`mx-auto ${hasMessages ? "max-w-3xl" : "w-full max-w-2xl"}`}>
+        <div className="relative flex items-end gap-2 rounded-2xl border border-border bg-secondary/40 px-4 py-3 shadow-sm focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+          <textarea
+            ref={inputRef}
+            rows={1}
+            placeholder="Ask about OPT, STEM OPT, CPT, H-1B…"
+            value={input}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            disabled={isTyping}
+            className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
+            style={{ maxHeight: 160 }}
+          />
+          <button
+            onClick={() => handleSend(input)}
+            disabled={!input.trim() || isTyping}
+            className="mb-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-2 text-center text-[11px] text-muted-foreground/50">
+          For informational purposes only. Always verify with your DSO or an immigration attorney.
+        </p>
+      </div>
+    </div>
+  )
+
+  // ── Landing page (no messages yet) ─────────────────────────────────────────
+  if (!hasMessages) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex flex-1 flex-col items-center justify-center px-6 pb-4">
+          <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+            <Bot className="h-7 w-7 text-primary" />
+          </div>
+          <h1 className="mb-2 text-2xl font-semibold tracking-tight">Where should we begin?</h1>
+          <p className="mb-8 max-w-sm text-center text-sm text-muted-foreground">
+            Ask me anything about F-1 visas, OPT, STEM OPT, CPT, H-1B, or US immigration.
+          </p>
+          <div className="mb-10 flex max-w-xl flex-wrap justify-center gap-2">
+            {quickQuestions.map((q) => (
+              <button
+                key={q}
+                onClick={() => handleSend(q)}
+                className="rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <div className="w-full max-w-2xl">{InputBox}</div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Active chat ─────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col">
 
-      {/* ── Top bar ───────────────────────────────────────────────────────── */}
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-border px-6 py-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15">
-          <Bot className="h-4 w-4 text-primary" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold leading-none">F1 Navigator AI</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Grounded in USCIS, DHS &amp; Federal policies</p>
-        </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-accent" />
-          <span className="text-xs text-muted-foreground">Online</span>
-        </div>
-      </div>
-
-      {/* ── Messages ──────────────────────────────────────────────────────── */}
+      {/* Messages */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto px-6 py-6
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-6
           [&::-webkit-scrollbar]:w-1.5
           [&::-webkit-scrollbar-track]:bg-transparent
           [&::-webkit-scrollbar-thumb]:rounded-full
@@ -160,10 +254,10 @@ export function AIAssistant() {
                 }`}>
                   {msg.content ? (() => {
                     const isAssistant = msg.role === "assistant"
-                    const isLong = isAssistant && msg.content.length > COLLAPSE_THRESHOLD
-                    const isExpanded = expandedMsgs.has(msg.id)
-                    const streaming = isTyping && msg.id === messages[messages.length - 1]?.id
-                    const display = isLong && !isExpanded && !streaming
+                    const isLong      = isAssistant && msg.content.length > COLLAPSE_THRESHOLD
+                    const isExpanded  = expandedMsgs.has(msg.id)
+                    const streaming   = isTyping && msg.id === messages[messages.length - 1]?.id
+                    const display     = isLong && !isExpanded && !streaming
                       ? msg.content.slice(0, COLLAPSE_THRESHOLD).trimEnd() + "…"
                       : msg.content
                     return (
@@ -186,7 +280,6 @@ export function AIAssistant() {
                   )}
                 </div>
 
-                {/* Source links — always shown below the bubble */}
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pl-1">
                     {msg.sources.map((s, i) => (
@@ -195,7 +288,7 @@ export function AIAssistant() {
                         href={s.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+                        className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
                       >
                         <ExternalLink className="h-2.5 w-2.5" />
                         {s.title.length > 40 ? s.title.slice(0, 40) + "…" : s.title}
@@ -232,45 +325,8 @@ export function AIAssistant() {
         </div>
       </div>
 
-      {/* ── Quick questions ───────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-t border-border px-6 py-2">
-        <div className="mx-auto max-w-3xl flex flex-wrap gap-1.5">
-          {quickQuestions.map((q) => (
-            <button
-              key={q}
-              onClick={() => handleSend(q)}
-              disabled={isTyping}
-              className="rounded-full border border-border bg-secondary/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Input ─────────────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 border-t border-border bg-card px-6 py-4">
-        <form
-          onSubmit={(e) => { e.preventDefault(); handleSend(input) }}
-          className="mx-auto flex max-w-3xl gap-2"
-        >
-          <Input
-            placeholder="Ask about OPT, STEM OPT, CPT, H-1B, or any F1 question…"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={isTyping}
-            className="flex-1 bg-secondary/50"
-          />
-          <Button type="submit" size="icon" disabled={!input.trim() || isTyping}>
-            <Send className="h-4 w-4" />
-            <span className="sr-only">Send</span>
-          </Button>
-        </form>
-        <p className="mt-2 text-center text-xs text-muted-foreground/60">
-          For informational purposes only. Always verify with your DSO or an immigration attorney.
-        </p>
-      </div>
-
+      {/* Input */}
+      {InputBox}
     </div>
   )
 }

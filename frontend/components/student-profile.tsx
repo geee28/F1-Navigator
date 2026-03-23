@@ -1,18 +1,50 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "./auth-context"
+import { notificationsApi } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { User, Save, LogOut, AlertCircle } from "lucide-react"
+import { User, Save, LogOut, AlertCircle, Bell, BellOff } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export function StudentProfile() {
   const { student, logout, updateProfile } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // ── Notification prefs ──────────────────────────────────────────────────────
+  const [notifGuides, setNotifGuides]     = useState<string[]>([])
+  const [notifSaving, setNotifSaving]     = useState(false)
+  const [notifSaved,  setNotifSaved]      = useState(false)
+
+  useEffect(() => {
+    notificationsApi.get()
+      .then(({ guides }) => setNotifGuides(guides))
+      .catch(() => {/* ignore — user may not be logged in yet */})
+  }, [])
+
+  const toggleGuide = async (guide: string) => {
+    const next = notifGuides.includes(guide)
+      ? notifGuides.filter((g) => g !== guide)
+      : [...notifGuides, guide]
+    setNotifGuides(next)
+    setNotifSaving(true)
+    try {
+      await notificationsApi.update(next)
+      setNotifSaved(true)
+      setTimeout(() => setNotifSaved(false), 2000)
+    } catch {
+      // revert on error
+      setNotifGuides(notifGuides)
+    } finally {
+      setNotifSaving(false)
+    }
+  }
+
 
   const [formData, setFormData] = useState({
     name: student?.name || "",
@@ -159,9 +191,15 @@ export function StudentProfile() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="Associate">Associate's</SelectItem>
                     <SelectItem value="Bachelor">Bachelor's</SelectItem>
+                    <SelectItem value="Post-Baccalaureate">Post-Baccalaureate</SelectItem>
                     <SelectItem value="Master">Master's</SelectItem>
+                    <SelectItem value="MBA">MBA</SelectItem>
+                    <SelectItem value="Professional">Professional Degree (JD/MD/DDS)</SelectItem>
                     <SelectItem value="PhD">PhD</SelectItem>
+                    <SelectItem value="Doctorate">Doctorate (Other)</SelectItem>
+                    <SelectItem value="Postdoctoral">Postdoctoral</SelectItem>
                   </SelectContent>
                 </Select>
               ) : (
@@ -245,6 +283,74 @@ export function StudentProfile() {
           </div>
         </Card>
       </div>
+
+      {/* Notification Preferences Card */}
+      <Card className="mt-6 border-border/50 p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-lg font-semibold">
+              <Bell className="h-5 w-5 text-primary" />
+              Email Notifications
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Get an email reminder 5 days before key deadlines in the selected process guides.
+              Reminders are sent to <span className="font-medium text-foreground">{student.email}</span>.
+            </p>
+          </div>
+          {notifSaving && (
+            <span className="text-xs text-muted-foreground">Saving…</span>
+          )}
+          {notifSaved && !notifSaving && (
+            <span className="text-xs text-primary">Saved ✓</span>
+          )}
+        </div>
+
+        {!formData.graduationDate && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>
+              Set your <strong>Expected Graduation Date</strong> in the Immigration Status card above so we can
+              compute your personalized deadlines.
+            </span>
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          {(
+            [
+              { id: "opt",      label: "OPT",             desc: "Optional Practical Training — 12-month post-graduation work auth" },
+              { id: "stem-opt", label: "STEM OPT",        desc: "24-month STEM extension — self-evaluation & expiry reminders" },
+              { id: "cpt",      label: "CPT",             desc: "Curricular Practical Training — end-by-graduation deadline" },
+              { id: "h1b",      label: "H-1B",            desc: "Specialty occupation visa — sponsor, lottery & petition deadlines" },
+            ] as const
+          ).map(({ id, label, desc }) => (
+            <label
+              key={id}
+              className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/50 p-3 transition-colors hover:bg-secondary/40"
+            >
+              <Checkbox
+                id={`notif-${id}`}
+                checked={notifGuides.includes(id)}
+                onCheckedChange={() => toggleGuide(id)}
+                disabled={notifSaving}
+                className="mt-0.5"
+              />
+              <div>
+                <span className="block text-sm font-medium">{label}</span>
+                <span className="text-xs text-muted-foreground">{desc}</span>
+              </div>
+            </label>
+          ))}
+        </div>
+
+        {notifGuides.length === 0 && (
+          <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <BellOff className="h-3.5 w-3.5" />
+            No notifications enabled. Select at least one guide above to start receiving reminders.
+          </p>
+        )}
+
+      </Card>
     </section>
   )
 }

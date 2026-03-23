@@ -21,6 +21,12 @@ class Database:
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
         self.pool = await asyncpg.create_pool(url, min_size=1, max_size=10)
+        # Auto-migrate: add notification_guides column if it doesn't exist yet
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "ALTER TABLE student_profiles "
+                "ADD COLUMN IF NOT EXISTS notification_guides TEXT DEFAULT '[]'"
+            )
 
     async def close(self) -> None:
         if self.pool:
@@ -86,6 +92,63 @@ class Database:
                 user_id,
                 *values,
             )
+
+    # ── Notification preferences ──────────────────────────────────────────────
+
+    async def get_notification_prefs(self, user_id: str) -> list[str]:
+        import json
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT notification_guides FROM student_profiles WHERE user_id = $1::uuid",
+                user_id,
+            )
+            if not row or not row["notification_guides"]:
+                return []
+            try:
+                return json.loads(row["notification_guides"])
+            except Exception:
+                return []
+
+    async def update_notification_prefs(self, user_id: str, guides: list[str]) -> None:
+        import json
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE student_profiles "
+                "SET notification_guides = $2, updated_at = NOW() "
+                "WHERE user_id = $1::uuid",
+                user_id,
+                json.dumps(guides),
+            )
+
+    async def get_users_for_notifications(self) -> list[dict]:
+        """Return all users who have at least one notification guide and a graduation date."""
+        import json
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT u.email,
+                          sp.name,
+                          sp.graduation_date::text,
+                          sp.notification_guides
+                   FROM users u
+                   JOIN student_profiles sp ON sp.user_id = u.id
+                   WHERE sp.graduation_date IS NOT NULL
+                     AND sp.notification_guides IS NOT NULL
+                     AND sp.notification_guides != '[]'
+                     AND sp.notification_guides != ''"""
+            )
+            result = []
+            for r in rows:
+                try:
+                    guides = json.loads(r["notification_guides"] or "[]")
+                except Exception:
+                    guides = []
+                result.append({
+                    "email":              r["email"],
+                    "name":               r["name"],
+                    "graduation_date":    r["graduation_date"],
+                    "notification_guides": guides,
+                })
+            return result
 
     # ── Documents ─────────────────────────────────────────────────────────────
 
