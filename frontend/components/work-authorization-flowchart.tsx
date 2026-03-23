@@ -522,9 +522,10 @@ interface FlowchartProps {
   externalProcess?: ProcessType
   onProcessChange?: (p: ProcessType) => void
   graduationDate?: string
+  onOpenI765?: (type: "opt" | "stem-opt") => void
 }
 
-export function WorkAuthorizationFlowchart({ externalProcess, onProcessChange, graduationDate }: FlowchartProps) {
+export function WorkAuthorizationFlowchart({ externalProcess, onProcessChange, graduationDate, onOpenI765 }: FlowchartProps) {
   const [internalProcess, setInternalProcess] = useState<ProcessType>("cpt")
   const [expandedSteps, setExpandedSteps] = useState<string[]>([])
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
@@ -604,10 +605,23 @@ export function WorkAuthorizationFlowchart({ externalProcess, onProcessChange, g
                       <CardTitle className="text-xl">{currentProcess.title}</CardTitle>
                       <CardDescription className="mt-1">{currentProcess.description}</CardDescription>
                     </div>
-                    <Badge variant="secondary" className="gap-1">
-                      <Clock className="h-3 w-3" />
-                      {currentProcess.totalTime}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="gap-1">
+                        <Clock className="h-3 w-3" />
+                        {currentProcess.totalTime}
+                      </Badge>
+                      {(activeProcess === "opt" || activeProcess === "stem-opt") && onOpenI765 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2 text-primary border-primary/40 hover:bg-primary/5"
+                          onClick={() => onOpenI765(activeProcess)}
+                        >
+                          <FileText className="h-4 w-4" />
+                          Fill I-765 Form
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Personalized timeline panel */}

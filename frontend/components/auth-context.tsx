@@ -15,6 +15,19 @@ export interface StudentData {
   countryOfCitizenship: string
   graduationDate: string
   documents: DocumentFile[]
+  middleName: string
+  dateOfBirth: string
+  birthCity: string
+  birthCountry: string
+  sex: string
+  maritalStatus: string
+  phoneNumber: string
+  mailingStreet: string
+  mailingApt: string
+  mailingCity: string
+  mailingState: string
+  mailingZip: string
+  sevisNumber: string
 }
 
 export interface DocumentFile {
@@ -51,6 +64,19 @@ function mapUser(user: UserData, docs: DocumentRecord[]): StudentData {
       uploadedAt: new Date(d.uploaded_at).toLocaleDateString(),
       dataUrl: d.file_data,
     })),
+    middleName: user.middle_name ?? "",
+    dateOfBirth: user.date_of_birth ?? "",
+    birthCity: user.birth_city ?? "",
+    birthCountry: user.birth_country ?? "",
+    sex: user.sex ?? "",
+    maritalStatus: user.marital_status ?? "",
+    phoneNumber: user.phone_number ?? "",
+    mailingStreet: user.mailing_street ?? "",
+    mailingApt: user.mailing_apt ?? "",
+    mailingCity: user.mailing_city ?? "",
+    mailingState: user.mailing_state ?? "",
+    mailingZip: user.mailing_zip ?? "",
+    sevisNumber: user.sevis_number ?? "",
   }
 }
 
@@ -117,6 +143,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       visa_status: data.visaStatus,
       country_of_citizenship: data.countryOfCitizenship,
       graduation_date: data.graduationDate,
+      middle_name: data.middleName,
+      date_of_birth: data.dateOfBirth,
+      birth_city: data.birthCity,
+      birth_country: data.birthCountry,
+      sex: data.sex,
+      marital_status: data.maritalStatus,
+      phone_number: data.phoneNumber,
+      mailing_street: data.mailingStreet,
+      mailing_apt: data.mailingApt,
+      mailing_city: data.mailingCity,
+      mailing_state: data.mailingState,
+      mailing_zip: data.mailingZip,
+      sevis_number: data.sevisNumber,
     })
     if (student) {
       setStudent({
@@ -129,6 +168,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         visaStatus: updated.visa_status ?? student.visaStatus,
         countryOfCitizenship: updated.country_of_citizenship ?? student.countryOfCitizenship,
         graduationDate: updated.graduation_date ?? student.graduationDate,
+        middleName: updated.middle_name ?? student.middleName,
+        dateOfBirth: updated.date_of_birth ?? student.dateOfBirth,
+        birthCity: updated.birth_city ?? student.birthCity,
+        birthCountry: updated.birth_country ?? student.birthCountry,
+        sex: updated.sex ?? student.sex,
+        maritalStatus: updated.marital_status ?? student.maritalStatus,
+        phoneNumber: updated.phone_number ?? student.phoneNumber,
+        mailingStreet: updated.mailing_street ?? student.mailingStreet,
+        mailingApt: updated.mailing_apt ?? student.mailingApt,
+        mailingCity: updated.mailing_city ?? student.mailingCity,
+        mailingState: updated.mailing_state ?? student.mailingState,
+        mailingZip: updated.mailing_zip ?? student.mailingZip,
+        sevisNumber: updated.sevis_number ?? student.sevisNumber,
       })
     }
   }

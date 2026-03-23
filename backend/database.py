@@ -17,16 +17,34 @@ class Database:
         url = os.getenv("DATABASE_URL", "")
         if not url:
             raise RuntimeError("DATABASE_URL env var is not set.")
-        # asyncpg needs postgresql:// scheme (not postgres://)
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
         self.pool = await asyncpg.create_pool(url, min_size=1, max_size=10)
-        # Auto-migrate: add notification_guides column if it doesn't exist yet
+        await self._migrate()
+
+    async def _migrate(self) -> None:
+        """Add any missing columns — idempotent."""
+        new_cols = [
+            ("notification_guides", "TEXT DEFAULT '[]'"),
+            ("middle_name",         "TEXT"),
+            ("date_of_birth",       "TEXT"),
+            ("birth_city",          "TEXT"),
+            ("birth_country",       "TEXT"),
+            ("sex",                 "TEXT"),
+            ("marital_status",      "TEXT"),
+            ("phone_number",        "TEXT"),
+            ("mailing_street",      "TEXT"),
+            ("mailing_apt",         "TEXT"),
+            ("mailing_city",        "TEXT"),
+            ("mailing_state",       "TEXT"),
+            ("mailing_zip",         "TEXT"),
+            ("sevis_number",        "TEXT"),
+        ]
         async with self.pool.acquire() as conn:
-            await conn.execute(
-                "ALTER TABLE student_profiles "
-                "ADD COLUMN IF NOT EXISTS notification_guides TEXT DEFAULT '[]'"
-            )
+            for col, col_type in new_cols:
+                await conn.execute(
+                    f"ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS {col} {col_type}"
+                )
 
     async def close(self) -> None:
         if self.pool:
@@ -73,7 +91,11 @@ class Database:
             row = await conn.fetchrow(
                 """SELECT name, university, major, degree_level,
                           year_of_study, visa_status, country_of_origin,
-                          country_of_citizenship, graduation_date
+                          country_of_citizenship, graduation_date,
+                          middle_name, date_of_birth, birth_city, birth_country,
+                          sex, marital_status, phone_number,
+                          mailing_street, mailing_apt, mailing_city,
+                          mailing_state, mailing_zip, sevis_number
                    FROM student_profiles WHERE user_id = $1::uuid""",
                 user_id,
             )

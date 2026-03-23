@@ -108,6 +108,19 @@ class ProfileUpdate(BaseModel):
     country_of_origin:      Optional[str] = None
     country_of_citizenship: Optional[str] = None
     graduation_date:        Optional[str] = None
+    middle_name:            Optional[str] = None
+    date_of_birth:          Optional[str] = None
+    birth_city:             Optional[str] = None
+    birth_country:          Optional[str] = None
+    sex:                    Optional[str] = None
+    marital_status:         Optional[str] = None
+    phone_number:           Optional[str] = None
+    mailing_street:         Optional[str] = None
+    mailing_apt:            Optional[str] = None
+    mailing_city:           Optional[str] = None
+    mailing_state:          Optional[str] = None
+    mailing_zip:            Optional[str] = None
+    sevis_number:           Optional[str] = None
 
 
 class NotificationPrefsUpdate(BaseModel):

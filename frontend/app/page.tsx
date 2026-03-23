@@ -9,13 +9,14 @@ import { StudentProfile } from "@/components/student-profile"
 import { DocumentStorage } from "@/components/document-storage"
 import { MeetingScheduler } from "@/components/meeting-scheduler"
 import { AIAssistant } from "@/components/ai-assistant"
+import { I765Form } from "@/components/i765-form"
 import { cn } from "@/lib/utils"
 import {
   Newspaper, FileText, FolderOpen, Calendar, Plus,
   GraduationCap, MessageSquare, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react"
 
-type ActiveView = "chat" | "flowchart" | "news" | "profile" | "documents" | "iso"
+type ActiveView = "chat" | "flowchart" | "news" | "profile" | "documents" | "iso" | "i765"
 
 export interface ChatSession {
   id: string
@@ -59,6 +60,7 @@ function HomeContent() {
   const [newChatKey,   setNewChatKey]   = useState(0)
   const [sessions,     setSessions]     = useState<ChatSession[]>([])
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
+  const [i765Type,     setI765Type]     = useState<"opt" | "stem-opt">("opt")
 
   useEffect(() => {
     try {
@@ -228,10 +230,20 @@ function HomeContent() {
             sessionId={activeChatId}
             onSessionCreate={handleSessionCreate}
           />
+        ) : activeView === "i765" ? (
+          <I765Form
+            formType={i765Type}
+            onBack={() => setActiveView("flowchart")}
+          />
         ) : (
           <div className="flex-1 overflow-y-auto px-6 py-8 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40">
             <div className="mx-auto max-w-4xl">
-              {activeView === "flowchart"  && <WorkAuthorizationFlowchart graduationDate={student?.graduationDate} />}
+              {activeView === "flowchart"  && (
+                <WorkAuthorizationFlowchart
+                  graduationDate={student?.graduationDate}
+                  onOpenI765={(type) => { setI765Type(type); setActiveView("i765") }}
+                />
+              )}
               {activeView === "news"       && <PolicyNews />}
               {activeView === "profile"    && <StudentProfile />}
               {activeView === "documents"  && <DocumentStorage />}
