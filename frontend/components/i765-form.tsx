@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import { useReactToPrint } from "react-to-print"
 import { useAuth } from "./auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,6 +42,8 @@ function Field({
 
 export function I765Form({ formType, onBack }: I765FormProps) {
   const { student } = useAuth()
+  const printRef = useRef<HTMLDivElement>(null)
+  const handlePrint = useReactToPrint({ contentRef: printRef, documentTitle: `USCIS Form I-765` })
 
   // Helper to split name into parts
   const nameParts = (student?.name ?? "").trim().split(/\s+/)
@@ -149,7 +152,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
   )
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40">
+    <div className="flex-1 overflow-y-auto bg-background [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 print:overflow-visible print:h-auto">
       {/* Top bar */}
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background px-6 py-3 print:hidden">
         <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
@@ -158,14 +161,14 @@ export function I765Form({ formType, onBack }: I765FormProps) {
         </button>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">USCIS Form I-765 — {formLabel} ({eligibility})</span>
-          <Button size="sm" variant="outline" className="gap-2" onClick={() => window.print()}>
+          <Button size="sm" variant="outline" className="gap-2" onClick={() => handlePrint()}>
             <Printer className="h-4 w-4" />
             Print
           </Button>
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-6 py-8">
+      <div ref={printRef} className="mx-auto max-w-4xl px-6 py-8">
         {/* Header */}
         <div className="mb-6 rounded-lg border border-border bg-primary/5 p-4">
           <div className="flex items-start justify-between">
@@ -357,10 +360,10 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Information About Your Last Arrival in the United States</h3>
           <div className="mb-3 grid grid-cols-2 gap-3">
             <Field label="21.a. Form I-94 Arrival-Departure Record Number (if any)">
-              {inp("i94", "e.g., 367088022A4")}
+              {inp("i94", "e.g., 763089022A4")}
             </Field>
             <Field label="21.b. Passport Number of Most Recently Issued Passport" required>
-              {inp("passportNumber", "e.g., T7970146")}
+              {inp("passportNumber", "e.g., Z9800169")}
             </Field>
           </div>
           <div className="mb-3 grid grid-cols-2 gap-3">

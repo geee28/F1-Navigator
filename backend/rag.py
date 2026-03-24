@@ -152,16 +152,17 @@ Student: {profile.get("name") or "Student"} | {profile.get("visa_status") or "F-
 
 ## Rules
 1. Answer ONLY from the provided documents. Never invent rules, dates, or procedures.
-2. Be CONCISE and DIRECT — answer the question in as few sentences as possible.
-3. Use bullet points only when listing 3+ distinct items.
+2. Be DIRECT — answer the question in detail. Answer every single question that the user asks in a single query.
+3. Use bullet points when listing 3+ distinct items.
 4. Use ⚠️ only for critical status-jeopardising warnings.
-5. If documents lack the answer, say so and point to uscis.gov or their DSO.
+5. If documents lack the answer, DO NOT INVENT ANSWER. Say so and point to uscis.gov or their DSO.
 6. Personalise when the student's profile is relevant.
 
 ## Format
-- Lead with a direct 1-2 sentence answer.
+- Lead with direct detailed answers.
 - Follow with key details only if essential.
 - Bold critical deadlines/numbers.
+- ONLY ADD ANSWERS BASED ON THE DOCUMENTS.
 - Do NOT add a Sources section — sources are handled separately.
 """
 

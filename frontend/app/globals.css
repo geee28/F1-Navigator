@@ -124,3 +124,21 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* Force all flex/scroll containers to expand fully */
+  body * {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  /* Restore inline/auto-height elements that shouldn't be block */
+  span, a, label, button, input, select, textarea, svg {
+    height: auto !important;
+    display: revert !important;
+  }
+}
