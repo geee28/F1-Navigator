@@ -1,20 +1,30 @@
 """
 F-1 Policy News — fetches recent news via DuckDuckGo, filters and structures
-via OpenAI GPT-4o-mini, caches in memory for 1 hour.
+via OpenAI GPT-4o-mini.
+
+Cache strategy:
+  - Persisted to disk (news_cache.json) so it survives server restarts.
+  - Served instantly from cache on every request.
+  - Background refresh triggered when cache is older than CACHE_TTL.
+  - Only one background refresh runs at a time (_is_fetching flag).
 """
 
+import asyncio
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from openai import AsyncOpenAI
 
-# ── In-memory cache ───────────────────────────────────────────────────────────
+# ── Cache config ───────────────────────────────────────────────────────────────
+_CACHE_FILE = Path(__file__).parent / "news_cache.json"
 _cache: dict[str, Any] = {"articles": None, "fetched_at": None}
-CACHE_TTL = timedelta(hours=1)
+CACHE_TTL   = timedelta(hours=6)
+_is_fetching = False
 
-# ── Search queries covering all F-1 relevant topics ───────────────────────────
+# ── Search queries ─────────────────────────────────────────────────────────────
 SEARCH_QUERIES = [
     "F1 student visa OPT authorization USCIS update 2026",
     "STEM OPT extension F1 student DHS rule 2026",
@@ -26,8 +36,39 @@ SEARCH_QUERIES = [
 ]
 
 
+# ── Disk cache helpers ─────────────────────────────────────────────────────────
+
+def _load_disk_cache() -> None:
+    """Load persisted cache from disk into memory on startup."""
+    try:
+        if _CACHE_FILE.exists():
+            data = json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+            _cache["articles"]  = data.get("articles")
+            raw_ts = data.get("fetched_at")
+            if raw_ts:
+                _cache["fetched_at"] = datetime.fromisoformat(raw_ts)
+    except Exception:
+        pass
+
+
+def _save_disk_cache(articles: list) -> None:
+    """Persist cache to disk so it survives server restarts."""
+    try:
+        _CACHE_FILE.write_text(
+            json.dumps({"articles": articles, "fetched_at": datetime.now().isoformat()}),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+# Load from disk immediately when the module is imported
+_load_disk_cache()
+
+
+# ── DuckDuckGo fetch (sync, runs in thread executor) ─────────────────────────
+
 def _fetch_ddg_sync() -> list[dict]:
-    """Run DuckDuckGo searches synchronously (called via executor)."""
     from ddgs import DDGS
 
     raw: list[dict] = []
@@ -36,7 +77,7 @@ def _fetch_ddg_sync() -> list[dict]:
     with DDGS() as ddgs:
         for query in SEARCH_QUERIES:
             try:
-                results = ddgs.news(query, max_results=10, timelimit="m")
+                results = ddgs.news(query, max_results=10, timelimit="w")
                 for r in results:
                     url = r.get("url", "")
                     if url and url not in seen_urls:
@@ -48,49 +89,52 @@ def _fetch_ddg_sync() -> list[dict]:
     return raw
 
 
-async def fetch_f1_news() -> list[dict]:
-    """Return structured, filtered F-1 news articles sorted newest-first."""
+# ── Date parser ────────────────────────────────────────────────────────────────
 
-    # Serve from cache if fresh
-    if (
-        _cache["articles"] is not None
-        and _cache["fetched_at"] is not None
-        and datetime.now() - _cache["fetched_at"] < CACHE_TTL
-    ):
-        return _cache["articles"]
+def _parse_date(a: dict) -> datetime:
+    raw = a.get("date", "")
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    except Exception:
+        pass
+    for fmt in ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(raw[:10], fmt)
+        except Exception:
+            continue
+    return datetime.min
 
-    import asyncio
 
+# ── Core fetch + structure ────────────────────────────────────────────────────
+
+async def _do_fetch() -> None:
+    """Fetch fresh articles, structure via OpenAI, update cache."""
+    global _is_fetching
+    if _is_fetching:
+        return
+    _is_fetching = True
     try:
         loop = asyncio.get_event_loop()
         raw = await asyncio.wait_for(
             loop.run_in_executor(None, _fetch_ddg_sync),
-            timeout=25.0,
+            timeout=30.0,
         )
-    except Exception:
-        return _cache["articles"] or []
+        if not raw:
+            return
 
-    if not raw:
-        return _cache["articles"] or []
+        articles_payload = json.dumps([
+            {
+                "title":  a.get("title", ""),
+                "url":    a.get("url", ""),
+                "date":   a.get("date", ""),
+                "source": a.get("source", ""),
+                "body":   (a.get("body") or "")[:400],
+            }
+            for a in raw[:30]
+        ])
 
-    if not raw:
-        return _cache["articles"] or []
-
-    # Truncate body to keep prompt manageable
-    articles_payload = json.dumps([
-        {
-            "title":  a.get("title", ""),
-            "url":    a.get("url", ""),
-            "date":   a.get("date", ""),
-            "source": a.get("source", ""),
-            "body":   (a.get("body") or "")[:400],
-        }
-        for a in raw[:30]
-    ])
-
-    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    try:
+        client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         resp = await client.chat.completions.create(
             model="gpt-4o-mini",
             response_format={"type": "json_object"},
@@ -120,35 +164,69 @@ async def fetch_f1_news() -> list[dict]:
             ],
         )
 
-        result = json.loads(resp.choices[0].message.content)
-        articles: list[dict] = result.get("articles", [])
+        result      = json.loads(resp.choices[0].message.content)
+        new_articles: list[dict] = result.get("articles", [])
 
-        # Sort newest-first by date, falling back to original order for unparseable dates
-        def _parse_date(a: dict):
-            from datetime import datetime as dt, timezone
-            raw = a.get("date", "")
-            try:
-                # Handles ISO 8601 with or without timezone
-                parsed = dt.fromisoformat(raw.replace("Z", "+00:00"))
-                return parsed.astimezone(timezone.utc).replace(tzinfo=None)
-            except Exception:
-                pass
-            for fmt in ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y"):
-                try:
-                    return dt.strptime(raw[:10], fmt)
-                except Exception:
-                    continue
-            return dt.min
+        # Merge with existing cache so we never lose newer articles
+        existing     = _cache["articles"] or []
+        seen_urls    = {a.get("sourceUrl", "") for a in new_articles}
+        merged       = new_articles + [a for a in existing if a.get("sourceUrl", "") not in seen_urls]
+        merged.sort(key=_parse_date, reverse=True)
 
-        articles.sort(key=_parse_date, reverse=True)
-
-        # Add sequential ids
-        for i, a in enumerate(articles):
+        # Keep the 25 most recent
+        merged = merged[:25]
+        for i, a in enumerate(merged):
             a["id"] = str(i + 1)
 
-        _cache["articles"]   = articles
+        _cache["articles"]   = merged
         _cache["fetched_at"] = datetime.now()
-        return articles
+        _save_disk_cache(merged)
 
     except Exception:
-        return _cache["articles"] or []
+        pass
+    finally:
+        _is_fetching = False
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+async def fetch_f1_news() -> list[dict]:
+    """
+    Always returns immediately.
+    - If cache has data: return it, and trigger background refresh if stale.
+    - If cache is empty (very first run ever): wait for fetch to complete.
+    """
+    has_data = _cache["articles"] is not None
+    is_stale = (
+        _cache["fetched_at"] is None
+        or datetime.now() - _cache["fetched_at"] >= CACHE_TTL
+    )
+
+    if has_data:
+        # Return cached data instantly; refresh in background if stale
+        if is_stale:
+            asyncio.create_task(_do_fetch())
+        return _cache["articles"]
+
+    # First-ever run — no disk cache either. Must wait.
+    await _do_fetch()
+    return _cache["articles"] or []
+
+
+async def force_refresh() -> list[dict]:
+    """Force an immediate re-fetch regardless of cache age. Waits for completion."""
+    global _is_fetching
+    _is_fetching = False  # reset in case a previous fetch got stuck
+    await _do_fetch()
+    return _cache["articles"] or []
+
+
+async def warm_cache() -> None:
+    """Called on server startup to pre-warm the cache if empty or stale."""
+    has_data = _cache["articles"] is not None
+    is_stale = (
+        _cache["fetched_at"] is None
+        or datetime.now() - _cache["fetched_at"] >= CACHE_TTL
+    )
+    if not has_data or is_stale:
+        asyncio.create_task(_do_fetch())

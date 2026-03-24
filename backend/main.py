@@ -11,7 +11,7 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -21,7 +21,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from auth import AuthHandler
 from database import Database
-from news import fetch_f1_news
+from news import fetch_f1_news, force_refresh, warm_cache
 from notifications import run_daily_notifications
 from rag import hybrid_search, stream_chat
 
@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     scheduler.start()
+    await warm_cache()   # pre-warm news cache in background
     yield
     scheduler.shutdown(wait=False)
     await db.close()
@@ -270,6 +271,13 @@ async def chat(req: ChatRequest, user_id: Optional[str] = Depends(optional_user)
 async def get_news():
     articles = await fetch_f1_news()
     return {"articles": articles}
+
+
+@app.post("/api/news/refresh")
+async def refresh_news(background_tasks: BackgroundTasks):
+    """Kick off a background re-fetch and return immediately."""
+    background_tasks.add_task(force_refresh)
+    return {"status": "refreshing"}
 
 
 # ── Documents ──────────────────────────────────────────────────────────────────
