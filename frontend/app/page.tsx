@@ -105,6 +105,10 @@ function HomeContent() {
     })
   }, [])
 
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) setSidebarOpen(false)
+  }
+
   const handleLoadSession = (id: string) => {
     const existing = chatInstances.find((i) => i.sessionId === id)
     if (existing) {
@@ -154,7 +158,7 @@ function HomeContent() {
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
       <aside className={cn(
         "flex flex-col border-r border-border/50 transition-all duration-200 print:hidden",
-        "fixed inset-y-0 left-0 z-40 bg-background md:relative md:z-auto md:bg-muted/30",
+        "fixed inset-y-0 left-0 z-40 bg-background md:relative md:z-auto md:bg-muted/30 md:h-full",
         sidebarOpen ? "w-64" : "w-0 overflow-hidden border-r-0"
       )}>
 
@@ -169,7 +173,7 @@ function HomeContent() {
         {/* New chat */}
         <div className="px-2 pb-1">
           <button
-            onClick={handleNewChat}
+            onClick={() => { handleNewChat(); closeSidebarOnMobile() }}
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
             <Plus className="h-4 w-4" />
@@ -188,7 +192,7 @@ function HomeContent() {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveView(item.id)}
+                onClick={() => { setActiveView(item.id); closeSidebarOnMobile() }}
                 className={cn(
                   "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors",
                   isActive
@@ -223,7 +227,7 @@ function HomeContent() {
                     )}
                   >
                     <button
-                      onClick={() => handleLoadSession(session.id)}
+                      onClick={() => { handleLoadSession(session.id); closeSidebarOnMobile() }}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
                       <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 opacity-60" />
@@ -244,7 +248,7 @@ function HomeContent() {
         </div>
 
         {/* Sources */}
-        <div className="border-t border-border/40 px-4 py-2">
+        <div className="flex-shrink-0 border-t border-border/40 px-4 py-1.5">
           <p className="mb-1 text-[9px] font-medium uppercase tracking-widest text-muted-foreground/40">
             Sources
           </p>
@@ -264,9 +268,9 @@ function HomeContent() {
         </div>
 
         {/* Profile */}
-        <div className="border-t border-border/40 p-2">
+        <div className="flex-shrink-0 border-t border-border/40 p-2">
           <button
-            onClick={() => setActiveView("profile")}
+            onClick={() => { setActiveView("profile"); closeSidebarOnMobile() }}
             className={cn(
               "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
               activeView === "profile"

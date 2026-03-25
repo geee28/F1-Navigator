@@ -60,8 +60,8 @@ export function MeetingScheduler() {
   return (
     <section className="py-2">
       <div className="mb-8">
-        <h2 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+        <h2 className="flex items-center gap-3 text-xl font-bold tracking-tight sm:text-3xl">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
             <Calendar className="h-5 w-5 text-primary" />
           </div>
           Connect with International Student Office
@@ -82,11 +82,11 @@ export function MeetingScheduler() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Form */}
-        <Card className="border-border/50 p-6 lg:col-span-2">
+        <Card className="overflow-hidden border-border/50 p-6 lg:col-span-2">
           <h3 className="mb-6 text-lg font-semibold">Request a Meeting</h3>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium">Full Name</label>
                 <Input
@@ -95,6 +95,7 @@ export function MeetingScheduler() {
                   placeholder="Your name"
                   disabled={isSubmitting}
                   required
+                  style={{ fontSize: "16px" }}
                 />
               </div>
               <div>
@@ -106,30 +107,35 @@ export function MeetingScheduler() {
                   placeholder="your@university.edu"
                   disabled={isSubmitting}
                   required
+                  style={{ fontSize: "16px" }}
                 />
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium">Preferred Date</label>
-                <Input
+                <input
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   min={today}
                   disabled={isSubmitting}
                   required
+                  className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ width: "95%", fontSize: "16px", boxSizing: "border-box" }}
                 />
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium">Preferred Time</label>
-                <Input
+                <input
                   type="time"
                   value={formData.time}
                   onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                   disabled={isSubmitting}
                   required
+                  className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring h-9 rounded-md border px-3 py-1 text-base shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ width: "95%", fontSize: "16px", boxSizing: "border-box" }}
                 />
               </div>
             </div>
@@ -161,6 +167,7 @@ export function MeetingScheduler() {
                 placeholder="Tell us more about your situation or questions..."
                 rows={4}
                 disabled={isSubmitting}
+                style={{ fontSize: "16px" }}
               />
             </div>
 

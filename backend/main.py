@@ -35,11 +35,11 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
-    # Run daily at 08:00 UTC
+    # Run daily at 01:30 UTC (8:30 PM EST)
     scheduler.add_job(
         run_daily_notifications,
         "cron",
-        hour=15, minute=23,
+        hour=1, minute=30,
         args=[db],
         id="daily_notifications",
         replace_existing=True,

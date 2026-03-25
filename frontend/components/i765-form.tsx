@@ -188,7 +188,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
         </div>
 
         {/* PART 1 */}
-        <Card className="mb-6 border-border/60 p-5">
+        <Card className="mb-6 overflow-hidden border-border/60 p-5">
           <h2 className="mb-4 border-b pb-2 text-sm font-bold uppercase tracking-wide">Part 1. Reason for Applying</h2>
           <Field label="I am applying for (select only one)">
             {sel("applicationType", [
@@ -200,7 +200,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
         </Card>
 
         {/* PART 2 – Name */}
-        <Card className="mb-6 border-border/60 p-5">
+        <Card className="mb-6 overflow-hidden border-border/60 p-5">
           <h2 className="mb-4 border-b pb-2 text-sm font-bold uppercase tracking-wide">Part 2. Information About You</h2>
 
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your Full Legal Name</h3>
@@ -229,7 +229,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           ))}
 
           <h3 className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your U.S. Mailing Address</h3>
-          <div className="mb-2 grid grid-cols-2 gap-3">
+          <div className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="5.b. Street Number and Name" fromProfile={!!student?.mailingStreet} required>
               {inp("mailingStreet", "e.g., 2850 Pleasant View Rd", !!student?.mailingStreet)}
             </Field>
@@ -256,11 +256,11 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           {form.sameAddress === "no" && (
             <>
               <h3 className="mb-3 mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">U.S. Physical Address</h3>
-              <div className="mb-2 grid grid-cols-2 gap-3">
+              <div className="mb-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="7.a. Street Number and Name" required>{inp("physicalStreet", "Street")}</Field>
                 <Field label="7.b. Apt. / Ste. / Flr.">{inp("physicalApt", "Unit")}</Field>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field label="7.c. City or Town" required>{inp("physicalCity", "City")}</Field>
                 <Field label="7.d. State" required>{inp("physicalState", "e.g., TX")}</Field>
                 <Field label="7.e. Zip Code" required>{inp("physicalZip", "Zip")}</Field>
@@ -269,7 +269,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           )}
 
           <h3 className="mb-3 mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Other Information</h3>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="8. Alien Registration Number (A-Number) (if any)">
               {inp("aNumber", "A-")}
             </Field>
@@ -277,7 +277,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
               {inp("uscisOnlineAccount", "")}
             </Field>
           </div>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="10. Sex" fromProfile={!!student?.sex} required>
               {sel("sex", [
                 { value: "Male",   label: "Male"   },
@@ -293,7 +293,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
               ], !!student?.maritalStatus)}
             </Field>
           </div>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="12. Have you previously filed Form I-765?">
               {sel("previousI765", [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }])}
             </Field>
@@ -306,7 +306,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
               <Field label="13.b. Social Security Number (SSN) (if known)">{inp("ssn", "XXX-XX-XXXX")}</Field>
             </div>
           )}
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="14. Do you want the SSA to issue you a Social Security card?">
               {sel("wantSsaCard", [{ value: "yes", label: "Yes" }, { value: "no", label: "No" }])}
             </Field>
@@ -316,13 +316,13 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           </div>
 
           <h3 className="mb-3 mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Father's Name (birth name)</h3>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="16.a. Family Name (Last Name)">{inp("fatherLast", "Father's last name")}</Field>
             <Field label="16.b. Given Name (First Name)">{inp("fatherFirst", "Father's first name")}</Field>
           </div>
 
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mother's Name (birth name)</h3>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="17.a. Family Name (Last Name)">{inp("motherLast", "Mother's last name")}</Field>
             <Field label="17.b. Given Name (First Name)">{inp("motherFirst", "Mother's first name")}</Field>
           </div>
@@ -358,7 +358,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           </div>
 
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Information About Your Last Arrival in the United States</h3>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="21.a. Form I-94 Arrival-Departure Record Number (if any)">
               {inp("i94", "e.g., 763089022A4")}
             </Field>
@@ -366,7 +366,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
               {inp("passportNumber", "e.g., Z9800169")}
             </Field>
           </div>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="21.c. Travel Document Number (if any)">
               {inp("travelDocNumber", "")}
             </Field>
@@ -376,16 +376,16 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           </div>
           <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="21.e. Passport Expiration Date (mm/dd/yyyy)" required>
-              <Input type="date" value={form.passportExpiry} onChange={(e) => set("passportExpiry", e.target.value)} className="h-8 text-sm" />
+              <Input type="date" style={{ width: "100%" }} value={form.passportExpiry} onChange={(e) => set("passportExpiry", e.target.value)} className="h-8 text-sm" />
             </Field>
             <Field label="22. Date of Last Arrival into the U.S. (mm/dd/yyyy)" required>
-              <Input type="date" value={form.lastArrivalDate} onChange={(e) => set("lastArrivalDate", e.target.value)} className="h-8 text-sm" />
+              <Input type="date" style={{ width: "100%" }} value={form.lastArrivalDate} onChange={(e) => set("lastArrivalDate", e.target.value)} className="h-8 text-sm" />
             </Field>
             <Field label="23. Place of Last Arrival into the U.S." required>
               {inp("lastArrivalPlace", "e.g., CHICAGO, IL")}
             </Field>
           </div>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="24. Immigration Status at Your Last Arrival" required>
               {inp("statusAtArrival", "e.g., F-1 Student")}
             </Field>
@@ -400,7 +400,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
           </div>
 
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Eligibility Category</h3>
-          <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="27. Eligibility Category" required>
               <Input value={form.eligibilityCategory} readOnly className="h-8 bg-primary/5 text-sm font-mono font-semibold" />
             </Field>
@@ -432,10 +432,10 @@ export function I765Form({ formType, onBack }: I765FormProps) {
         </Card>
 
         {/* PART 3 */}
-        <Card className="mb-6 border-border/60 p-5">
+        <Card className="mb-6 overflow-hidden border-border/60 p-5">
           <h2 className="mb-4 border-b pb-2 text-sm font-bold uppercase tracking-wide">Part 3. Applicant's Statement, Contact Information, Declaration, Certification, and Signature</h2>
 
-          <div className="mb-4 grid grid-cols-2 gap-3">
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="3. Applicant's Daytime Telephone Number" fromProfile={!!student?.phoneNumber} required>
               {inp("dayTimePhone", "e.g., 6087220091", !!student?.phoneNumber)}
             </Field>
@@ -469,7 +469,7 @@ export function I765Form({ formType, onBack }: I765FormProps) {
               </div>
             </Field>
             <Field label="7.b. Date of Signature (mm/dd/yyyy)" required>
-              <Input type="date" value={form.signatureDate} onChange={(e) => set("signatureDate", e.target.value)} className="h-8 text-sm" />
+              <Input type="date" style={{ width: "100%" }} value={form.signatureDate} onChange={(e) => set("signatureDate", e.target.value)} className="h-8 text-sm" />
             </Field>
           </div>
         </Card>

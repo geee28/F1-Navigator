@@ -175,7 +175,7 @@ export function AIAssistant({ sessionId, onSessionCreate }: AIAssistantProps) {
             onKeyDown={handleKeyDown}
             disabled={isTyping}
             className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
-            style={{ maxHeight: 160 }}
+            style={{ maxHeight: 160, fontSize: "16px" }}
           />
           <button
             onClick={() => handleSend(input)}
