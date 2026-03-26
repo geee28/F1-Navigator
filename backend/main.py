@@ -29,17 +29,17 @@ from rag import classify_query, hybrid_search, stream_chat, stream_chitchat
 
 db        = Database()
 auth      = AuthHandler()
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(timezone="America/New_York")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
-    # Run daily at 01:30 UTC (8:30 PM EST)
+    # Run daily at 10:00 AM Eastern Time
     scheduler.add_job(
         run_daily_notifications,
         "cron",
-        hour=1, minute=30,
+        hour=18, minute=44,
         args=[db],
         id="daily_notifications",
         replace_existing=True,
@@ -129,8 +129,9 @@ class NotificationPrefsUpdate(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    message: str
-    history: list[dict] = []
+    message:    str
+    history:    list[dict] = []
+    session_id: Optional[str] = None
 
 
 class DocumentUpload(BaseModel):
@@ -249,7 +250,7 @@ async def chat(req: ChatRequest, user_id: Optional[str] = Depends(optional_user)
             return
 
         # Stream tokens
-        async for token in stream_chat(req.message, chunks, profile, req.history):
+        async for token in stream_chat(req.message, chunks, profile, req.history, req.session_id):
             yield "data: " + json.dumps({"type": "token", "content": token}) + "\n\n"
 
         # Send sources after streaming finishes
@@ -288,6 +289,13 @@ async def refresh_news(background_tasks: BackgroundTasks):
     """Kick off a background re-fetch and return immediately."""
     background_tasks.add_task(force_refresh)
     return {"status": "refreshing"}
+
+
+@app.post("/api/notifications/test")
+async def test_notifications(user_id: str = Depends(current_user)):
+    """Manually trigger the notification job — for testing only."""
+    await run_daily_notifications(db)
+    return {"status": "done"}
 
 
 # ── Documents ──────────────────────────────────────────────────────────────────

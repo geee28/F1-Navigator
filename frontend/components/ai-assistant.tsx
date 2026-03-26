@@ -120,7 +120,7 @@ export function AIAssistant({ sessionId, onSessionCreate }: AIAssistantProps) {
     try {
       const history = messagesRef.current.slice(-6).map((m) => ({ role: m.role, content: m.content }))
 
-      for await (const event of chatStream(trimmed, history)) {
+      for await (const event of chatStream(trimmed, history, sid)) {
         if (event.type === "token") {
           setMessages((prev) =>
             prev.map((m) => m.id === assistantId ? { ...m, content: m.content + event.content } : m)

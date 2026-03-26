@@ -5,6 +5,7 @@ Extracted from f1_navigator.py, adapted for server use.
 
 import os
 import re
+import json
 import hashlib
 from dataclasses import dataclass
 from typing import AsyncGenerator
@@ -230,26 +231,46 @@ def build_user_message(query: str, chunks: list[Chunk]) -> str:
     )
 
 
-HISTORY_EXTRACTOR_PROMPT = """You are extracting durable conversation state from prior chat messages for use in a RAG pipeline.
+# ── Incremental history state ──────────────────────────────────────────────────
 
-Your output must contain only metadata that is safe to carry forward into future answer-generation.
+HISTORY_EXTRACT_MODEL = os.getenv("OPENAI_HISTORY_MODEL", CHAT_MODEL)
+
+# In-memory store: session_id -> state dict. Resets on server restart (acceptable for now).
+_summary_store: dict[str, dict] = {}
+
+EMPTY_STATE: dict = {
+    "intent": "",
+    "topic": "",
+    "constraints": [],
+    "known_entities": [],
+    "doc_references": [],
+    "change_log": [],
+    "_processed_count": 0,  # internal: how many history messages have been merged
+}
+
+INCREMENTAL_EXTRACTOR_PROMPT = """You are updating an existing conversation state object for a RAG pipeline.
+
+Your job is to merge NEW_MESSAGES into EXISTING_STATE.
 
 SOURCE TRUST RULES:
-- User messages are authoritative for intent, constraints, corrections, and preferences.
-- Assistant messages are NOT authoritative for facts unless they explicitly include document references, citations, URLs, doc IDs, or quoted retrieved evidence.
-- Assistant messages may be used only to recover: doc references, explicit task framing, change events.
-- Never copy assistant answer wording into the output.
+- User messages are authoritative for intent, constraints, corrections, preferences, and status updates.
+- Assistant messages are NOT authoritative for facts unless they explicitly contain citations, document references, URLs, doc IDs, or quoted retrieved evidence.
+- Never copy assistant answer prose into the updated state.
 
-EXTRACT ONLY: intent, topic, constraints, known_entities, doc_references, change_log
-EXCLUDE: prior answers, prose summaries, explanations, recommendations, interpretations not explicitly supported by user instructions or cited evidence
+PRESERVE: intent, topic, constraints, known_entities, doc_references, change_log
 
-NORMALIZATION RULES:
-- Deduplicate semantically equivalent constraints and entities
-- Prefer the latest user-stated constraint if multiple versions conflict
-- Preserve exact doc IDs / URLs / citation labels when present
-- Keep each field concise and non-generative
+SPECIAL RULE:
+If a user message corrects or refines eligibility, status, timeline, possession of a document/status, prior assumptions, or application state — preserve it even if the message is short (e.g. "I already have post-completion OPT", "My degree is Computer Science", "I submitted the application").
 
-Return JSON only using this schema:
+MERGE RULES:
+- Merge NEW_MESSAGES into EXISTING_STATE
+- Deduplicate semantically equivalent items
+- Prefer the latest user-stated correction if conflicts exist
+- Add new doc references exactly as given (URL, title, citation label)
+- Keep all fields concise and factual
+- Do not store explanations, answer paragraphs, or recommendations
+
+Return valid JSON only:
 {
   "intent": "",
   "topic": "",
@@ -259,11 +280,82 @@ Return JSON only using this schema:
   "change_log": [{"turn_ref": "", "change_type": "", "details": ""}]
 }
 
-Conversation:
-{{ROLE_TAGGED_MESSAGES}}"""
+EXISTING_STATE:
+{{EXISTING_STATE_JSON}}
+
+NEW_MESSAGES:
+{{NEW_MESSAGES}}"""
 
 
-HISTORY_EXTRACT_MODEL = os.getenv("OPENAI_HISTORY_MODEL", CHAT_MODEL)
+def _load_summary(session_id: str | None) -> dict:
+    if not session_id:
+        return dict(EMPTY_STATE)
+    stored = _summary_store.get(session_id)
+    if stored:
+        print(f"[HISTORY STATE] Loaded existing summary for session={session_id} (processed={stored.get('_processed_count',0)})")
+    else:
+        print(f"[HISTORY STATE] No existing summary for session={session_id} — starting fresh")
+    return stored if stored else dict(EMPTY_STATE)
+
+
+def _save_summary(session_id: str | None, state: dict) -> None:
+    if session_id:
+        _summary_store[session_id] = state
+
+
+async def update_history_state(session_id: str | None, history: list[dict]) -> dict:
+    """
+    Incrementally merge new history messages into the persisted session state.
+    Returns the updated state dict.
+    """
+    existing = _load_summary(session_id)
+    processed = existing.get("_processed_count", 0)
+
+    if not history:
+        return existing
+
+    if processed == 0 and history:
+        # Recovery mode: no prior state — process all available history at once
+        new_msgs = history
+        mode = "recovery"
+    else:
+        # Incremental: only messages we haven't merged yet
+        new_msgs = history[processed:]
+        mode = "incremental"
+
+    if not new_msgs:
+        print(f"[HISTORY STATE] No new messages since last update (processed={processed})")
+        return existing
+
+    print(f"[HISTORY STATE] {mode} update — merging {len(new_msgs)} new message(s) into state")
+
+    # Strip internal fields before sending to LLM
+    state_for_llm = {k: v for k, v in existing.items() if not k.startswith("_")}
+    role_tagged   = "\n".join(f"[{m['role'].upper()}]: {m['content']}" for m in new_msgs)
+
+    prompt = (INCREMENTAL_EXTRACTOR_PROMPT
+              .replace("{{EXISTING_STATE_JSON}}", json.dumps(state_for_llm, indent=2))
+              .replace("{{NEW_MESSAGES}}", role_tagged))
+
+    try:
+        resp = await _async_client().chat.completions.create(
+            model       = HISTORY_EXTRACT_MODEL,
+            messages    = [{"role": "user", "content": prompt}],
+            temperature = 0.0,
+            max_tokens  = 600,
+        )
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)   # strip markdown fences
+        raw = re.sub(r"\s*```$",           "", raw)
+        updated = json.loads(raw)
+        updated["_processed_count"] = processed + len(new_msgs)
+        _save_summary(session_id, updated)
+        print(f"[HISTORY STATE] Updated — processed_count now {updated['_processed_count']}")
+        print(f"[HISTORY STATE] topic={updated.get('topic')!r}  intent={updated.get('intent')!r}  entities={updated.get('known_entities')}")
+        return updated
+    except Exception as e:
+        print(f"[HISTORY STATE] FAILED to update: {e} — keeping existing state")
+        return existing
 
 # ── Query classifier ───────────────────────────────────────────────────────────
 
@@ -329,27 +421,6 @@ async def stream_chitchat(query: str, profile: dict) -> AsyncGenerator[str, None
         if delta:
             yield delta
 
-async def extract_history_context(history: list[dict]) -> str | None:
-    """Summarise raw history into safe metadata JSON using a fast LLM call."""
-    if not history:
-        print("[HISTORY EXTRACTOR] No history — skipping.")
-        return None
-    print(f"[HISTORY EXTRACTOR] Running on {len(history[-6:])} messages using model={HISTORY_EXTRACT_MODEL}...")
-    try:
-        role_tagged = "\n".join(f"[{m['role'].upper()}]: {m['content']}" for m in history[-6:])
-        prompt = HISTORY_EXTRACTOR_PROMPT.replace("{{ROLE_TAGGED_MESSAGES}}", role_tagged)
-        resp = await _async_client().chat.completions.create(
-            model       = HISTORY_EXTRACT_MODEL,
-            messages    = [{"role": "user", "content": prompt}],
-            temperature = 0.0,
-            max_tokens  = 512,
-        )
-        result = resp.choices[0].message.content.strip()
-        print(f"[HISTORY EXTRACTOR] Success:\n{result}\n")
-        return result
-    except Exception as e:
-        print(f"[HISTORY EXTRACTOR] FAILED: {e}")
-        return None
 
 
 # ── Streaming chat ────────────────────────────────────────────────────────────
@@ -359,27 +430,28 @@ async def stream_chat(
     chunks: list[Chunk],
     profile: dict,
     history: list[dict],
+    session_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield text tokens from GPT-4o, grounded in retrieved chunks."""
-    print(f"\n[STREAM_CHAT] history received: {len(history)} message(s)")
-    for i, m in enumerate(history):
-        print(f"  [{i}] role={m.get('role')} | content_preview={m.get('content','')[:80]!r}")
-    context_json = await extract_history_context(history)
+    # Incrementally update the persisted session state from new history messages
+    state = await update_history_state(session_id, history)
 
+    # Build context block from the clean state (no raw assistant answers)
+    state_for_prompt = {k: v for k, v in state.items() if not k.startswith("_")}
+    has_context = any(
+        state_for_prompt.get(k) for k in ("intent", "topic", "constraints", "known_entities")
+    )
     history_block = []
-    if context_json:
-        history_block = [
-            {
-                "role": "system",
-                "content": (
-                    "## Conversation Context (extracted metadata only — NOT factual answers)\n"
-                    "The following is a structured summary of what the student has been asking about. "
-                    "Use it ONLY to understand their intent and avoid them repeating themselves. "
-                    "All factual answers must come from the retrieved documents below, not from this context.\n\n"
-                    + context_json
-                )
-            }
-        ]
+    if has_context:
+        history_block = [{
+            "role": "system",
+            "content": (
+                "## Conversation Context (structured metadata — NOT factual answers)\n"
+                "Use this ONLY to understand the student's intent and avoid them repeating themselves. "
+                "All factual answers must come from the retrieved documents.\n\n"
+                + json.dumps(state_for_prompt, indent=2)
+            )
+        }]
 
     messages = (
         [{"role": "system", "content": build_system_prompt(profile)}]
@@ -388,15 +460,10 @@ async def stream_chat(
     )
 
     print("\n" + "="*80)
-    print("FULL PROMPT SENT TO GPT")
-    print(f"RAW HISTORY FROM FRONTEND: {len(history)} message(s)")
-    for i, m in enumerate(history):
-        print(f"  history[{i}] role={m.get('role')} | {m.get('content','')[:120]!r}")
+    print(f"PROMPT | session={session_id} | history_msgs={len(history)} | state_processed={state.get('_processed_count',0)}")
     print("="*80)
     for i, m in enumerate(messages):
-        print(f"\n[{i}] role={m['role']}")
-        print("-" * 40)
-        print(m["content"])
+        print(f"\n[{i}] role={m['role']}\n{'-'*40}\n{m['content']}")
     print("="*80 + "\n")
 
     stream = await _async_client().chat.completions.create(
