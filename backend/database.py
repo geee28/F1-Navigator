@@ -26,6 +26,7 @@ class Database:
         """Add any missing columns — idempotent."""
         new_cols = [
             ("notification_guides", "TEXT DEFAULT '[]'"),
+            ("completed_steps",     "TEXT DEFAULT '[]'"),
             ("middle_name",         "TEXT"),
             ("date_of_birth",       "TEXT"),
             ("birth_city",          "TEXT"),
@@ -140,6 +141,31 @@ class Database:
                 "WHERE user_id = $1::uuid",
                 user_id,
                 json.dumps(guides),
+            )
+
+    async def get_completed_steps(self, user_id: str) -> list[str]:
+        import json
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT completed_steps FROM student_profiles WHERE user_id = $1::uuid",
+                user_id,
+            )
+            if not row or not row["completed_steps"]:
+                return []
+            try:
+                return json.loads(row["completed_steps"])
+            except Exception:
+                return []
+
+    async def update_completed_steps(self, user_id: str, steps: list[str]) -> None:
+        import json
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE student_profiles "
+                "SET completed_steps = $2, updated_at = NOW() "
+                "WHERE user_id = $1::uuid",
+                user_id,
+                json.dumps(steps),
             )
 
     async def get_users_for_notifications(self) -> list[dict]:

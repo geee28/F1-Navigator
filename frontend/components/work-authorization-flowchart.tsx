@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "./auth-context"
+import { progressApi } from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -526,14 +528,25 @@ interface FlowchartProps {
 }
 
 export function WorkAuthorizationFlowchart({ externalProcess, onProcessChange, graduationDate, onOpenI765 }: FlowchartProps) {
+  const { isAuthenticated } = useAuth()
   const [internalProcess, setInternalProcess] = useState<ProcessType>("cpt")
   const [expandedSteps, setExpandedSteps] = useState<string[]>([])
   const [completedSteps, setCompletedSteps] = useState<string[]>([])
 
+  // Load completed steps: from DB if logged in, else from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem("f1nav-completed-steps")
-    if (saved) setCompletedSteps(JSON.parse(saved))
-  }, [])
+    if (isAuthenticated) {
+      progressApi.get()
+        .then(res => setCompletedSteps(res.steps))
+        .catch(() => {
+          const saved = localStorage.getItem("f1nav-completed-steps")
+          if (saved) setCompletedSteps(JSON.parse(saved))
+        })
+    } else {
+      const saved = localStorage.getItem("f1nav-completed-steps")
+      if (saved) setCompletedSteps(JSON.parse(saved))
+    }
+  }, [isAuthenticated])
 
   const activeProcess = externalProcess ?? internalProcess
   const setActiveProcess = (p: ProcessType) => {
@@ -557,6 +570,9 @@ export function WorkAuthorizationFlowchart({ externalProcess, onProcessChange, g
         ? prev.filter(id => id !== stepId)
         : [...prev, stepId]
       localStorage.setItem("f1nav-completed-steps", JSON.stringify(next))
+      if (isAuthenticated) {
+        progressApi.update(next).catch(() => {})
+      }
       return next
     })
   }

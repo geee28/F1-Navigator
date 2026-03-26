@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(
         run_daily_notifications,
         "cron",
-        hour=18, minute=44,
+        hour=18, minute=15,
         args=[db],
         id="daily_notifications",
         replace_existing=True,
@@ -215,6 +215,27 @@ async def update_notifications(
     guides = [g for g in data.guides if g in VALID_GUIDES]
     await db.update_notification_prefs(user_id, guides)
     return {"guides": guides}
+
+
+# ── Process guide progress ────────────────────────────────────────────────────
+
+class CompletedStepsUpdate(BaseModel):
+    steps: list[str]
+
+
+@app.get("/api/progress")
+async def get_progress(user_id: str = Depends(current_user)):
+    steps = await db.get_completed_steps(user_id)
+    return {"steps": steps}
+
+
+@app.put("/api/progress")
+async def update_progress(
+    data: CompletedStepsUpdate,
+    user_id: str = Depends(current_user),
+):
+    await db.update_completed_steps(user_id, data.steps)
+    return {"steps": data.steps}
 
 
 # ── Chat (streaming SSE) ───────────────────────────────────────────────────────
